@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>BLAB</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#155e75">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="BLAB">
+
+  <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">B</div>
+      <div>
+        <div>BLAB</div>
+        <small>Shared lab scheduling</small>
+      </div>
+    </div>
+
+    <nav>
+      <button class="nav-btn active" data-page="dashboard">Dashboard</button>
+      <button class="nav-btn" data-page="book">Book</button>
+      <button class="nav-btn" data-page="schedule">Schedule</button>
+      <button class="nav-btn" data-page="tasks">Tasks</button>
+      <button class="nav-btn" data-page="orders">Orders</button>
+      <button class="nav-btn" data-page="admin">Admin</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <span class="pill">iPhone-ready lab app</span>
+        <h1>BLAB</h1>
+        <p>Book hotplates, furnaces, and centrifuges. See what others are using before planning experiments.</p>
+      </div>
+      <button class="btn secondary" id="enableNotificationsBtn">Enable Reminders</button>
+    </section>
+
+    <section id="setupCard" class="card setup-card">
+      <h2>Enter BLAB</h2>
+      <p class="muted">
+        No password needed. Enter your name and the shared lab access code.
+      </p>
+
+      <div class="form">
+        <input id="setupName" placeholder="Your name, e.g. Amina">
+        <input id="setupCode" placeholder="Lab access code, e.g. blab2026">
+        <button class="btn" id="enterAppBtn">Enter App</button>
+      </div>
+
+      <p class="muted">
+        Default starter access code is <b>blab2026</b>. Change it in <code>public/app.js</code>.
+      </p>
+    </section>
+
+    <section id="appShell" class="hidden">
+      <section id="dashboard" class="page active">
+        <div class="grid grid-3">
+          <div class="stat">
+            <div class="muted">Current User</div>
+            <div class="stat-text" id="currentUserText">-</div>
+          </div>
+
+          <div class="stat">
+            <div class="muted">Busy Now</div>
+            <div class="stat-number" id="busyNowCount">0</div>
+          </div>
+
+          <div class="stat">
+            <div class="muted">Upcoming Today</div>
+            <div class="stat-number" id="upcomingTodayCount">0</div>
+          </div>
+        </div>
+
+        <br>
+
+        <div class="grid grid-2">
+          <div class="card">
+            <h2>Live Instrument Status</h2>
+            <div id="instrumentStatus" class="list"></div>
+          </div>
+
+          <div class="card">
+            <h2>Quick Instructions</h2>
+            <ol class="instructions">
+              <li>Open BLAB in Safari on iPhone.</li>
+              <li>Tap Share → Add to Home Screen.</li>
+              <li>Open BLAB from the Home Screen.</li>
+              <li>Tap Enable Reminders and allow notifications.</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section id="book" class="page">
+        <div class="grid grid-2">
+          <div class="card">
+            <h2>Book Instrument</h2>
+
+            <div class="form">
+              <label>
+                Instrument type
+                <select id="instrumentCategory">
+                  <option value="Hotplate">Hotplate</option>
+                  <option value="Furnace">Furnace</option>
+                  <option value="Centrifuge">Centrifuge</option>
+                </select>
+              </label>
+
+              <label>
+                Specific instrument
+                <select id="instrumentSelect"></select>
+              </label>
+
+              <div class="form-row">
+                <label>
+                  From
+                  <input id="startTime" type="datetime-local">
+                </label>
+
+                <label>
+                  To
+                  <input id="endTime" type="datetime-local">
+                </label>
+              </div>
+
+              <label>
+                Reminder before ending
+                <select id="reminderMinutes">
+                  <option value="0">No reminder</option>
+                  <option value="15">15 minutes before</option>
+                  <option value="30">30 minutes before</option>
+                  <option value="60" selected>1 hour before</option>
+                  <option value="120">2 hours before</option>
+                  <option value="1440">1 day before</option>
+                </select>
+              </label>
+
+              <button class="btn" id="bookInstrumentBtn">Add Booking</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Conflict Check</h2>
+            <p class="muted">
+              BLAB checks existing bookings before saving. If someone already booked the same instrument during that time, your booking is blocked.
+            </p>
+            <div id="bookingMessage"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="schedule" class="page">
+        <div class="grid grid-3">
+          <div class="card">
+            <h2>Hotplates</h2>
+            <div id="hotplateBookings" class="list"></div>
+          </div>
+
+          <div class="card">
+            <h2>Furnace</h2>
+            <div id="furnaceBookings" class="list"></div>
+          </div>
+
+          <div class="card">
+            <h2>Centrifuge</h2>
+            <div id="centrifugeBookings" class="list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tasks" class="page">
+        <div class="grid grid-2">
+          <div class="card">
+            <h2>Add Task</h2>
+            <div class="form">
+              <input id="taskTitle" placeholder="Task, e.g. Refill DI water">
+              <input id="taskDue" type="date">
+              <button class="btn" id="addTaskBtn">Add Task</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Shared Tasks</h2>
+            <div id="tasksList" class="list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="orders" class="page">
+        <div class="grid grid-2">
+          <div class="card">
+            <h2>Request Supplies</h2>
+            <div class="form">
+              <input id="orderItem" placeholder="Item, e.g. pipette tips">
+              <input id="orderQuantity" placeholder="Quantity/specification">
+              <input id="orderReason" placeholder="Reason/urgency">
+              <button class="btn" id="addOrderBtn">Add Order</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Order Board</h2>
+            <div id="ordersList" class="list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="admin" class="page">
+        <div class="grid grid-2">
+          <div class="card">
+            <h2>Admin Mode</h2>
+            <p id="adminStatus" class="muted"></p>
+
+            <div class="form">
+              <input id="adminCodeInput" placeholder="Admin code">
+              <button class="btn" id="unlockAdminBtn">Unlock Admin</button>
+              <button class="btn secondary" id="lockAdminBtn">Lock Admin</button>
+            </div>
+
+            <p class="muted">
+              Default starter admin code is <b>adminblab</b>. Change it in <code>public/app.js</code>.
+            </p>
+          </div>
+
+          <div class="card">
+            <h2>Admin Can</h2>
+            <ul>
+              <li>Delete old bookings</li>
+              <li>Delete finished tasks</li>
+              <li>Delete received orders</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer>
+    BLAB · Shared lab scheduling PWA
+  </footer>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
