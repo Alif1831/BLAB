@@ -76,6 +76,7 @@ let currentProfile = null;
 let isAdminUnlocked = localStorage.getItem("blabAdminUnlocked") === "true";
 
 let bookings = [];
+let projects = [];
 let tasks = [];
 let orders = [];
 
@@ -109,6 +110,8 @@ $("enterAppBtn").addEventListener("click", enterApp);
 $("enableNotificationsBtn").addEventListener("click", enablePushNotifications);
 $("instrumentCategory").addEventListener("change", updateInstrumentOptions);
 $("bookInstrumentBtn").addEventListener("click", addBooking);
+$("addProjectBtn").addEventListener("click", addProject);
+$("projectStatusFilter").addEventListener("change", renderProjects);
 $("addTaskBtn").addEventListener("click", addTask);
 $("addOrderBtn").addEventListener("click", addOrder);
 $("unlockAdminBtn").addEventListener("click", unlockAdmin);
@@ -204,6 +207,15 @@ function showPage(pageId, button) {
 function subscribeToData() {
   onSnapshot(collection(db, "bookings"), snapshot => {
     bookings = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    renderAll();
+  });
+
+  onSnapshot(collection(db, "projects"), snapshot => {
+    projects = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
@@ -342,6 +354,87 @@ async function deleteBooking(id) {
   await deleteDoc(doc(db, "bookings", id));
 }
 
+async function addProject() {
+  const title = $("projectTitle").value.trim();
+  const ownerName = $("projectOwner").value.trim() || currentProfile.name;
+  const status = $("projectStatus").value;
+  const goal = $("projectGoal").value.trim();
+  const progress = $("projectProgress").value.trim();
+  const nextStep = $("projectNextStep").value.trim();
+  const targetDate = $("projectTargetDate").value;
+
+  if (!title) {
+    alert("Please enter a project title.");
+    return;
+  }
+
+  await addDoc(collection(db, "projects"), {
+    title,
+    ownerId: currentUser.uid,
+    ownerName,
+    status,
+    goal,
+    progress,
+    nextStep,
+    targetDate,
+    createdBy: currentUser.uid,
+    createdByName: currentProfile.name,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+
+  $("projectTitle").value = "";
+  $("projectOwner").value = "";
+  $("projectStatus").value = "Active";
+  $("projectGoal").value = "";
+  $("projectProgress").value = "";
+  $("projectNextStep").value = "";
+  $("projectTargetDate").value = "";
+}
+
+async function updateProjectProgress(id) {
+  const project = projects.find(item => item.id === id);
+  if (!project) return;
+
+  const progress = prompt("Update project progress:", project.progress || "");
+  if (progress === null) return;
+
+  const nextStep = prompt("Update next step:", project.nextStep || "");
+  if (nextStep === null) return;
+
+  await updateDoc(doc(db, "projects", id), {
+    progress: progress.trim(),
+    nextStep: nextStep.trim(),
+    updatedAt: serverTimestamp(),
+    lastUpdatedBy: currentProfile.name
+  });
+}
+
+async function updateProjectStatus(id, status) {
+  await updateDoc(doc(db, "projects", id), {
+    status,
+    updatedAt: serverTimestamp(),
+    lastUpdatedBy: currentProfile.name
+  });
+}
+
+async function deleteProject(id) {
+  const project = projects.find(item => item.id === id);
+
+  if (!project) return;
+
+  const isOwner = project.createdBy === currentUser.uid || project.ownerId === currentUser.uid;
+
+  if (!isAdmin() && !isOwner) {
+    alert("Only the project owner or admin can delete this project.");
+    return;
+  }
+
+  if (!confirm("Delete this project?")) return;
+
+  await deleteDoc(doc(db, "projects", id));
+}
+
 async function addTask() {
   const title = $("taskTitle").value.trim();
   const dueDate = $("taskDue").value;
@@ -454,7 +547,7 @@ async function enablePushNotifications() {
   }
 
   try {
-    const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js");
 
     const token = await getToken(messaging, {
       vapidKey: PUBLIC_VAPID_KEY,
@@ -512,6 +605,7 @@ function renderAll() {
 
   renderDashboard();
   renderBookings();
+  renderProjects();
   renderTasks();
   renderOrders();
   renderAdmin();
@@ -538,8 +632,11 @@ function renderDashboard() {
     return start > now && start.toDateString() === today;
   });
 
+  const activeProjects = projects.filter(project => project.status !== "Completed");
+
   $("busyNowCount").textContent = active.length;
   $("upcomingTodayCount").textContent = upcomingToday.length;
+  $("activeProjectsCount").textContent = activeProjects.length;
   $("currentUserText").textContent = currentProfile.name;
 
   const allInstruments = Object.values(instrumentGroups).flat();
@@ -665,6 +762,72 @@ function getBookingStatus(booking) {
   };
 }
 
+function renderProjects() {
+  const box = $("projectsList");
+  const filter = $("projectStatusFilter")?.value || "All";
+
+  let visibleProjects = projects.slice();
+
+  if (filter !== "All") {
+    visibleProjects = visibleProjects.filter(project => project.status === filter);
+  }
+
+  visibleProjects.sort((a, b) => {
+    const aTime = a.updatedAt?.toDate ? a.updatedAt.toDate().getTime() : 0;
+    const bTime = b.updatedAt?.toDate ? b.updatedAt.toDate().getTime() : 0;
+    return bTime - aTime;
+  });
+
+  if (visibleProjects.length === 0) {
+    box.innerHTML = `<div class="empty">No projects found.</div>`;
+    return;
+  }
+
+  box.innerHTML = visibleProjects.map(project => {
+    const badgeClass = getProjectBadgeClass(project.status);
+    const updated = project.updatedAt?.toDate
+      ? formatDateTime(project.updatedAt.toDate())
+      : "Not available";
+
+    return `
+      <div class="item project-item">
+        <div class="item-head">
+          <div>
+            <div class="title">${escapeHTML(project.title)}</div>
+            <div class="muted">Lead: ${escapeHTML(project.ownerName || "Not set")}</div>
+            <div class="muted">Target: ${escapeHTML(project.targetDate || "Not set")}</div>
+          </div>
+          <span class="badge ${badgeClass}">${escapeHTML(project.status || "Active")}</span>
+        </div>
+
+        <p><b>Goal:</b> ${escapeHTML(project.goal || "Not added yet")}</p>
+        <p><b>Progress:</b> ${escapeHTML(project.progress || "No update yet")}</p>
+        <p><b>Next step:</b> ${escapeHTML(project.nextStep || "Not set")}</p>
+        <p class="muted">Last updated: ${updated}${project.lastUpdatedBy ? ` by ${escapeHTML(project.lastUpdatedBy)}` : ""}</p>
+
+        <div class="actions">
+          <button class="btn small secondary" onclick="window.blab.updateProjectProgress('${project.id}')">Update Progress</button>
+          <button class="btn small" onclick="window.blab.updateProjectStatus('${project.id}', 'Active')">Active</button>
+          <button class="btn small warning" onclick="window.blab.updateProjectStatus('${project.id}', 'Paused')">Paused</button>
+          <button class="btn small success" onclick="window.blab.updateProjectStatus('${project.id}', 'Completed')">Completed</button>
+          ${
+            isAdmin() || project.createdBy === currentUser.uid || project.ownerId === currentUser.uid
+              ? `<button class="btn small danger" onclick="window.blab.deleteProject('${project.id}')">Delete</button>`
+              : ""
+          }
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function getProjectBadgeClass(status) {
+  if (status === "Completed") return "success";
+  if (status === "Paused") return "warning";
+  if (status === "Planning") return "";
+  return "success";
+}
+
 function renderTasks() {
   const box = $("tasksList");
 
@@ -788,6 +951,9 @@ function escapeHTML(text) {
 window.blab = {
   markBookingFinished,
   deleteBooking,
+  updateProjectProgress,
+  updateProjectStatus,
+  deleteProject,
   markTaskDone,
   reopenTask,
   deleteTask,

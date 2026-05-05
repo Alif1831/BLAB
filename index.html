@@ -27,6 +27,7 @@
       <button class="nav-btn active" data-page="dashboard">Dashboard</button>
       <button class="nav-btn" data-page="book">Book</button>
       <button class="nav-btn" data-page="schedule">Schedule</button>
+      <button class="nav-btn" data-page="projects">Projects</button>
       <button class="nav-btn" data-page="tasks">Tasks</button>
       <button class="nav-btn" data-page="orders">Orders</button>
       <button class="nav-btn" data-page="admin">Admin</button>
@@ -38,7 +39,7 @@
       <div>
         <span class="pill">iPhone-ready lab app</span>
         <h1>BLAB</h1>
-        <p>Book hotplates, furnaces, and centrifuges. See what others are using before planning experiments.</p>
+        <p>Book shared instruments, track project goals, and see what others are using before planning experiments.</p>
       </div>
       <button class="btn secondary" id="enableNotificationsBtn">Enable Reminders</button>
     </section>
@@ -62,7 +63,7 @@
 
     <section id="appShell" class="hidden">
       <section id="dashboard" class="page active">
-        <div class="grid grid-3">
+        <div class="grid grid-4">
           <div class="stat">
             <div class="muted">Current User</div>
             <div class="stat-text" id="currentUserText">-</div>
@@ -76,6 +77,11 @@
           <div class="stat">
             <div class="muted">Upcoming Today</div>
             <div class="stat-number" id="upcomingTodayCount">0</div>
+          </div>
+
+          <div class="stat">
+            <div class="muted">Active Projects</div>
+            <div class="stat-number" id="activeProjectsCount">0</div>
           </div>
         </div>
 
@@ -176,6 +182,53 @@
         </div>
       </section>
 
+      <section id="projects" class="page">
+        <div class="grid grid-2">
+          <div class="card">
+            <h2>Add / Track Project</h2>
+            <div class="form">
+              <input id="projectTitle" placeholder="Project title, e.g. NiFe-LDH OER optimization">
+
+              <div class="form-row">
+                <input id="projectOwner" placeholder="Lead/owner, default is your name">
+                <select id="projectStatus">
+                  <option value="Active" selected>Active</option>
+                  <option value="Planning">Planning</option>
+                  <option value="Paused">Paused</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+
+              <textarea id="projectGoal" rows="3" placeholder="Main goal / research question"></textarea>
+              <textarea id="projectProgress" rows="3" placeholder="Current progress / latest result"></textarea>
+              <textarea id="projectNextStep" rows="2" placeholder="Next experiment / next action"></textarea>
+
+              <label>
+                Target date / milestone date
+                <input id="projectTargetDate" type="date">
+              </label>
+
+              <button class="btn" id="addProjectBtn">Add Project</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Project Board</h2>
+            <label>
+              Filter
+              <select id="projectStatusFilter">
+                <option value="All">All projects</option>
+                <option value="Active">Active</option>
+                <option value="Planning">Planning</option>
+                <option value="Paused">Paused</option>
+                <option value="Completed">Completed</option>
+              </select>
+            </label>
+            <div id="projectsList" class="list"></div>
+          </div>
+        </div>
+      </section>
+
       <section id="tasks" class="page">
         <div class="grid grid-2">
           <div class="card">
@@ -236,6 +289,7 @@
               <li>Delete old bookings</li>
               <li>Delete finished tasks</li>
               <li>Delete received orders</li>
+              <li>Delete projects if cleanup is needed</li>
             </ul>
           </div>
         </div>
