@@ -1,19 +1,19 @@
 :root {
-  --bg: #071426;
-  --bg2: #0C234B;
-  --card: #102A4C;
-  --card2: #16355F;
-  --text: #F8FAFC;
-  --muted: #B8C7DA;
-  --line: rgba(255,255,255,0.14);
-  --primary: #0C234B;
+  --bg: #F7FAFC;
+  --bg2: #EEF2F7;
+  --card: #FFFFFF;
+  --card2: #F8FAFC;
+  --text: #0F172A;
+  --muted: #5B677A;
+  --line: #E2E8F0;
+  --primary: #0C234B; /* Arizona Blue */
   --primary2: #1E5288;
-  --accent: #AB0520;
+  --accent: #AB0520; /* Arizona Red */
   --accent2: #D61F3C;
   --danger: #EF4444;
   --warning: #F59E0B;
   --success: #22C55E;
-  --shadow: 0 18px 42px rgba(0, 0, 0, 0.34);
+  --shadow: 0 14px 34px rgba(15, 23, 42, 0.10);
   --radius: 18px;
 }
 
@@ -25,20 +25,20 @@ body {
   margin: 0;
   font-family: Inter, Arial, sans-serif;
   background:
-    radial-gradient(circle at top left, rgba(171,5,32,0.30), transparent 32%),
-    radial-gradient(circle at top right, rgba(30,82,136,0.32), transparent 35%),
-    linear-gradient(180deg, var(--bg2), var(--bg));
-  color: var(--text);
+    radial-gradient(circle at top left, rgba(171,5,32,0.08), transparent 28%),
+    radial-gradient(circle at top right, rgba(12,35,75,0.08), transparent 32%),
+    linear-gradient(180deg, #FFFFFF, var(--bg));
+  color: var(--primary);
 }
 
 .topbar {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: rgba(12,35,75,0.94);
+  background: rgba(255,255,255,0.94);
   backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--line);
-  box-shadow: 0 4px 20px rgba(15,23,42,0.06);
+  border-bottom: 4px solid var(--accent);
+  box-shadow: 0 4px 20px rgba(15,23,42,0.08);
   padding: 14px 20px;
   display: flex;
   align-items: center;
@@ -90,14 +90,14 @@ nav button {
 }
 
 nav button:hover {
-  background: rgba(171,5,32,0.18);
-  color: var(--text);
+  background: rgba(171,5,32,0.08);
+  color: var(--accent);
 }
 
 nav button.active {
-  background: linear-gradient(135deg, var(--accent), var(--primary2));
+  background: linear-gradient(135deg, var(--primary), var(--accent));
   color: white;
-  box-shadow: 0 8px 20px rgba(8,145,178,0.25);
+  box-shadow: 0 8px 20px rgba(12,35,75,0.18);
 }
 
 main {
@@ -167,7 +167,7 @@ main {
 }
 
 .card, .stat {
-  background: linear-gradient(180deg, var(--card), #0B1D36);
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 20px;
@@ -213,15 +213,15 @@ input, select, textarea {
   border-radius: 14px;
   padding: 13px 14px;
   font: inherit;
-  background: #0B1D36;
+  background: #FFFFFF;
   color: var(--text);
   outline: none;
 }
 
 input:focus, select:focus, textarea:focus {
   border-color: var(--primary2);
-  background: #122B4D;
-  box-shadow: 0 0 0 4px rgba(171,5,32,0.22);
+  background: #FFFFFF;
+  box-shadow: 0 0 0 4px rgba(171,5,32,0.10);
 }
 
 .btn {
@@ -235,8 +235,8 @@ input:focus, select:focus, textarea:focus {
 }
 
 .btn.secondary {
-  background: rgba(171,5,32,0.18);
-  color: var(--text);
+  background: rgba(171,5,32,0.08);
+  color: var(--accent);
 }
 
 .btn.success {
@@ -289,8 +289,8 @@ input:focus, select:focus, textarea:focus {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 900;
-  background: rgba(171,5,32,0.18);
-  color: var(--text);
+  background: rgba(171,5,32,0.08);
+  color: var(--accent);
   white-space: nowrap;
 }
 
@@ -332,7 +332,7 @@ input:focus, select:focus, textarea:focus {
 .empty {
   padding: 16px;
   color: var(--muted);
-  background: #0B1D36;
+  background: #F8FAFC;
   border: 1px dashed var(--line);
   border-radius: 14px;
   text-align: center;
@@ -459,7 +459,7 @@ textarea {
 }
 
 .workspace-sidebar {
-  background: #0B1D36;
+  background: #FFFFFF;
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 14px;
@@ -582,4 +582,101 @@ button:disabled {
 
 footer {
   color: var(--muted);
+}
+
+
+/* Light University of Arizona theme overrides: white app with blue/red accents */
+.topbar .brand, .topbar .brand small {
+  color: var(--primary);
+}
+
+nav button {
+  color: var(--primary);
+}
+
+.hero {
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+}
+
+.card, .stat, .workspace-sidebar, .workspace-editor {
+  background: #FFFFFF;
+  color: var(--text);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  backdrop-filter: none;
+}
+
+.card h2, .workspace-editor h3, .title, .stat-number, .stat-text, .notebook-card h3, .editor-head h3 {
+  color: var(--primary);
+}
+
+.item, .note-file {
+  background: #FFFFFF;
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.item:hover, .note-file:hover {
+  border-color: rgba(171,5,32,0.35);
+}
+
+input, select, textarea {
+  background: #FFFFFF;
+  color: var(--text);
+  border: 1px solid #CBD5E1;
+}
+
+.workspace-help, .note-file.active-note {
+  background: #F8FAFC;
+  border-color: rgba(12,35,75,0.18);
+  box-shadow: 0 0 0 4px rgba(12,35,75,0.06);
+}
+
+.empty {
+  background: #F8FAFC;
+  color: var(--muted);
+}
+
+.badge {
+  background: rgba(12,35,75,0.08);
+  color: var(--primary);
+}
+
+.badge.success {
+  background: #DCFCE7;
+  color: #166534;
+}
+
+.badge.warning {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+.badge.danger {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.badge.secondary, .badge.info {
+  background: rgba(171,5,32,0.10);
+  color: var(--accent);
+}
+
+.btn {
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+}
+
+.btn.secondary {
+  background: #FFFFFF;
+  border: 1px solid var(--line);
+  color: var(--primary);
+}
+
+.reminder-toast {
+  background: var(--primary);
+}
+
+code {
+  background: #EEF2F7;
+  color: var(--primary);
 }
