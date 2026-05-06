@@ -83,6 +83,11 @@ let tasks = [];
 let orders = [];
 let reminderTimer = null;
 
+window.addEventListener("unhandledrejection", event => {
+  console.error("BLAB unhandled error:", event.reason);
+  showProjectMessage("Something stopped while saving/loading. Open browser console for details or send the error text.", "danger");
+});
+
 const LOCAL_REMINDERS_KEY = "blabLocalRemindersEnabled";
 const SHOWN_REMINDERS_KEY = "blabShownInAppRemindersV1";
 
@@ -235,6 +240,9 @@ function subscribeToData() {
     }));
 
     renderAll();
+  }, error => {
+    console.error("Projects listener failed:", error);
+    showProjectMessage(`Projects could not load: ${error.message || error}`, "danger");
   });
 
   onSnapshot(collection(db, "projectNotes"), snapshot => {
@@ -244,6 +252,9 @@ function subscribeToData() {
     }));
 
     renderAll();
+  }, error => {
+    console.error("Project notes listener failed:", error);
+    showProjectMessage(`Project notes could not load: ${error.message || error}`, "danger");
   });
 
   onSnapshot(collection(db, "tasks"), snapshot => {
@@ -378,41 +389,88 @@ async function deleteBooking(id) {
 }
 
 async function addProject() {
-  const title = $("projectTitle").value.trim();
-  const ownerName = $("projectOwner").value.trim() || currentProfile.name;
-  const status = $("projectStatus").value;
-  const goal = $("projectGoal").value.trim();
-  const progress = $("projectProgress").value.trim();
-  const nextStep = $("projectNextStep").value.trim();
-  const targetDate = $("projectTargetDate").value;
+  const button = $("addProjectBtn");
+  const originalText = button?.textContent || "Add Project";
 
-  if (!title) {
-    alert("Please enter a project title.");
-    return;
+  try {
+    if (!currentUser || !currentProfile) {
+      alert("BLAB is still signing you in. Wait 5 seconds, then try again.");
+      return;
+    }
+
+    if (button) {
+      button.disabled = true;
+      button.textContent = "Saving project...";
+    }
+
+    showProjectMessage("Saving project...", "info");
+
+    const title = $("projectTitle").value.trim();
+    const ownerName = $("projectOwner").value.trim() || currentProfile.name;
+    const status = $("projectStatus").value;
+    const goal = $("projectGoal").value.trim();
+    const progress = $("projectProgress").value.trim();
+    const nextStep = $("projectNextStep").value.trim();
+    const targetDate = $("projectTargetDate").value;
+
+    if (!title) {
+      showProjectMessage("Please enter a project title.", "danger");
+      alert("Please enter a project title.");
+      return;
+    }
+
+    const newProject = await addDoc(collection(db, "projects"), {
+      title,
+      ownerId: currentUser.uid,
+      ownerName,
+      status,
+      goal,
+      progress,
+      nextStep,
+      targetDate,
+      createdBy: currentUser.uid,
+      createdByName: currentProfile.name,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    });
+
+    $("projectTitle").value = "";
+    $("projectOwner").value = "";
+    $("projectStatus").value = "Active";
+    $("projectGoal").value = "";
+    $("projectProgress").value = "";
+    $("projectNextStep").value = "";
+    $("projectTargetDate").value = "";
+
+    showProjectMessage(`Project saved. Opening workspace for: ${title}`, "success");
+
+    // Give Firestore snapshot a moment to update the local project list, then open the workspace.
+    setTimeout(() => {
+      openProjectNotebook(newProject.id);
+    }, 400);
+  } catch (error) {
+    console.error("Add project failed:", error);
+    showProjectMessage(`Project could not be saved: ${error.message || error}`, "danger");
+    alert(`Project could not be saved. Error: ${error.message || error}`);
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
   }
+}
 
-  await addDoc(collection(db, "projects"), {
-    title,
-    ownerId: currentUser.uid,
-    ownerName,
-    status,
-    goal,
-    progress,
-    nextStep,
-    targetDate,
-    createdBy: currentUser.uid,
-    createdByName: currentProfile.name,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  });
+function showProjectMessage(message, type = "info") {
+  const box = $("projectMessage");
+  if (!box) return;
 
-  $("projectTitle").value = "";
-  $("projectOwner").value = "";
-  $("projectStatus").value = "Active";
-  $("projectGoal").value = "";
-  $("projectProgress").value = "";
-  $("projectNextStep").value = "";
-  $("projectTargetDate").value = "";
+  const badgeClass = type === "success" ? "success" : type === "danger" ? "danger" : "secondary";
+  box.innerHTML = `
+    <div class="item message-item">
+      <span class="badge ${badgeClass}">${escapeHTML(type === "danger" ? "Notice" : type)}</span>
+      <p>${escapeHTML(message)}</p>
+    </div>
+  `;
 }
 
 async function updateProjectProgress(id) {
@@ -581,11 +639,23 @@ async function deleteProjectNote(id) {
 
 function openProjectNotebook(projectId) {
   const select = $("noteProjectSelect");
+  const projectExists = projects.some(project => project.id === projectId);
+
+  if (!projectExists) {
+    // The project was just created. Wait for the Firestore snapshot, then try again.
+    setTimeout(() => openProjectNotebook(projectId), 500);
+    return;
+  }
+
   if (select) {
+    renderProjectNoteSelectors();
     select.value = projectId;
   }
+
   clearProjectNoteEditor(false);
   renderProjectNotes();
+  showProjectMessage("Project workspace opened. Create Week 1, Experiment 1, or another editable note file below.", "success");
+
   const card = document.querySelector(".notebook-card");
   if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
 }
