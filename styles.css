@@ -395,3 +395,56 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+
+.reminder-toast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  max-width: 380px;
+  background: #0f172a;
+  color: white;
+  padding: 18px 44px 18px 18px;
+  border-radius: 16px;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.35);
+  transform: translateY(140%);
+  opacity: 0;
+  transition: 0.25s ease;
+  z-index: 9999;
+  line-height: 1.4;
+}
+
+.reminder-toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.toast-close {
+  position: absolute;
+  right: 10px;
+  top: 8px;
+  border: none;
+  background: transparent;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.notebook-card h3 {
+  margin: 0 0 10px;
+  color: var(--primary);
+}
+
+.note-item p {
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+@media (max-width: 850px) {
+  .reminder-toast {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    max-width: none;
+  }
+}

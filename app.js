@@ -77,8 +77,13 @@ let isAdminUnlocked = localStorage.getItem("blabAdminUnlocked") === "true";
 
 let bookings = [];
 let projects = [];
+let projectNotes = [];
 let tasks = [];
 let orders = [];
+let reminderTimer = null;
+
+const LOCAL_REMINDERS_KEY = "blabLocalRemindersEnabled";
+const SHOWN_REMINDERS_KEY = "blabShownInAppRemindersV1";
 
 const instrumentGroups = {
   Hotplate: [
@@ -112,6 +117,10 @@ $("instrumentCategory").addEventListener("change", updateInstrumentOptions);
 $("bookInstrumentBtn").addEventListener("click", addBooking);
 $("addProjectBtn").addEventListener("click", addProject);
 $("projectStatusFilter").addEventListener("change", renderProjects);
+$("noteProjectSelect").addEventListener("change", renderProjectNotes);
+$("addProjectNoteBtn").addEventListener("click", addProjectNote);
+$("exportProjectPdfBtn").addEventListener("click", exportSelectedProjectNotesPdf);
+$("exportProjectPngBtn").addEventListener("click", exportSelectedProjectNotesPng);
 $("addTaskBtn").addEventListener("click", addTask);
 $("addOrderBtn").addEventListener("click", addOrder);
 $("unlockAdminBtn").addEventListener("click", unlockAdmin);
@@ -194,6 +203,7 @@ function openApp() {
   $("appShell").classList.remove("hidden");
   $("currentUserText").textContent = currentProfile.name;
   renderAll();
+  startInAppReminderChecker();
 }
 
 function showPage(pageId, button) {
@@ -216,6 +226,15 @@ function subscribeToData() {
 
   onSnapshot(collection(db, "projects"), snapshot => {
     projects = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+
+    renderAll();
+  });
+
+  onSnapshot(collection(db, "projectNotes"), snapshot => {
+    projectNotes = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
@@ -435,6 +454,226 @@ async function deleteProject(id) {
   await deleteDoc(doc(db, "projects", id));
 }
 
+
+async function addProjectNote() {
+  const projectId = $("noteProjectSelect").value;
+  const text = $("projectNoteText").value.trim();
+
+  if (!projectId) {
+    alert("Please select a project first.");
+    return;
+  }
+
+  if (!text) {
+    alert("Please write a note first.");
+    return;
+  }
+
+  const project = projects.find(item => item.id === projectId);
+
+  await addDoc(collection(db, "projectNotes"), {
+    projectId,
+    projectTitle: project?.title || "Untitled project",
+    text,
+    authorId: currentUser.uid,
+    authorName: currentProfile.name,
+    createdAt: serverTimestamp()
+  });
+
+  await updateDoc(doc(db, "projects", projectId), {
+    progress: text,
+    updatedAt: serverTimestamp(),
+    lastUpdatedBy: currentProfile.name
+  });
+
+  $("projectNoteText").value = "";
+}
+
+function getSelectedProject() {
+  const projectId = $("noteProjectSelect")?.value;
+  return projects.find(item => item.id === projectId) || null;
+}
+
+function getNotesForProject(projectId) {
+  return projectNotes
+    .filter(note => note.projectId === projectId)
+    .sort((a, b) => {
+      const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+      const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+      return bTime - aTime;
+    });
+}
+
+function exportSelectedProjectNotesPdf() {
+  const project = getSelectedProject();
+
+  if (!project) {
+    alert("Please select a project first.");
+    return;
+  }
+
+  const notes = getNotesForProject(project.id);
+  const printable = buildProjectNotesHtml(project, notes);
+  const win = window.open("", "_blank");
+
+  if (!win) {
+    alert("Popup blocked. Allow popups for BLAB, then try again.");
+    return;
+  }
+
+  win.document.write(printable);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 300);
+}
+
+function exportSelectedProjectNotesPng() {
+  const project = getSelectedProject();
+
+  if (!project) {
+    alert("Please select a project first.");
+    return;
+  }
+
+  const notes = getNotesForProject(project.id);
+  const lines = buildProjectNotesLines(project, notes);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const width = 1200;
+  const padding = 60;
+  const lineHeight = 30;
+  const wrapped = [];
+
+  ctx.font = "22px Arial";
+  lines.forEach(line => {
+    wrapped.push(...wrapCanvasText(ctx, line, width - padding * 2));
+  });
+
+  canvas.width = width;
+  canvas.height = Math.max(900, padding * 2 + wrapped.length * lineHeight + 40);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "#155e75";
+  ctx.font = "bold 42px Arial";
+  ctx.fillText("BLAB Project Notes", padding, padding);
+
+  ctx.fillStyle = "#172033";
+  ctx.font = "22px Arial";
+
+  let y = padding + 60;
+  wrapped.forEach(line => {
+    ctx.fillText(line, padding, y);
+    y += lineHeight;
+  });
+
+  const link = document.createElement("a");
+  link.download = makeSafeFileName(`${project.title || "project"}-notes.png`);
+  link.href = canvas.toDataURL("image/png");
+  link.click();
+}
+
+function buildProjectNotesLines(project, notes) {
+  const lines = [];
+  lines.push(`Project: ${project.title || "Untitled"}`);
+  lines.push(`Lead: ${project.ownerName || "Not set"}`);
+  lines.push(`Status: ${project.status || "Active"}`);
+  lines.push(`Target: ${project.targetDate || "Not set"}`);
+  lines.push("");
+  lines.push(`Goal: ${project.goal || "Not added"}`);
+  lines.push(`Current progress: ${project.progress || "No progress added"}`);
+  lines.push(`Next step: ${project.nextStep || "Not set"}`);
+  lines.push("");
+  lines.push("Notes:");
+
+  if (notes.length === 0) {
+    lines.push("No notes yet.");
+  } else {
+    notes.forEach(note => {
+      const date = note.createdAt?.toDate ? formatDateTime(note.createdAt.toDate()) : "Date not available";
+      lines.push("");
+      lines.push(`${date} — ${note.authorName || "Unknown"}`);
+      String(note.text || "").split("\n").forEach(noteLine => lines.push(noteLine));
+    });
+  }
+
+  return lines;
+}
+
+function buildProjectNotesHtml(project, notes) {
+  const noteHtml = notes.length === 0
+    ? `<p>No notes yet.</p>`
+    : notes.map(note => {
+        const date = note.createdAt?.toDate ? formatDateTime(note.createdAt.toDate()) : "Date not available";
+        return `
+          <section class="note">
+            <h3>${escapeHTML(date)} — ${escapeHTML(note.authorName || "Unknown")}</h3>
+            <p>${escapeHTML(note.text || "").replaceAll("\n", "<br>")}</p>
+          </section>
+        `;
+      }).join("");
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <title>${escapeHTML(project.title || "Project Notes")}</title>
+        <style>
+          body { font-family: Arial, sans-serif; color: #172033; padding: 36px; line-height: 1.45; }
+          h1 { color: #155e75; margin-bottom: 4px; }
+          h2 { color: #155e75; border-bottom: 1px solid #d8e0ea; padding-bottom: 8px; }
+          .meta { color: #64748b; margin-bottom: 24px; }
+          .box { border: 1px solid #d8e0ea; border-radius: 14px; padding: 16px; margin: 14px 0; }
+          .note { border-top: 1px solid #d8e0ea; padding-top: 12px; margin-top: 16px; }
+          .note h3 { font-size: 15px; color: #334155; }
+          @media print { button { display: none; } body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <button onclick="window.print()">Save / Print PDF</button>
+        <h1>BLAB Project Notes</h1>
+        <div class="meta">Exported ${escapeHTML(formatDateTime(new Date()))}</div>
+        <div class="box">
+          <h2>${escapeHTML(project.title || "Untitled project")}</h2>
+          <p><b>Lead:</b> ${escapeHTML(project.ownerName || "Not set")}</p>
+          <p><b>Status:</b> ${escapeHTML(project.status || "Active")}</p>
+          <p><b>Target:</b> ${escapeHTML(project.targetDate || "Not set")}</p>
+          <p><b>Goal:</b><br>${escapeHTML(project.goal || "Not added").replaceAll("\n", "<br>")}</p>
+          <p><b>Current progress:</b><br>${escapeHTML(project.progress || "No progress added").replaceAll("\n", "<br>")}</p>
+          <p><b>Next step:</b><br>${escapeHTML(project.nextStep || "Not set").replaceAll("\n", "<br>")}</p>
+        </div>
+        <h2>Notes</h2>
+        ${noteHtml}
+      </body>
+    </html>
+  `;
+}
+
+function wrapCanvasText(ctx, text, maxWidth) {
+  if (text === "") return [""];
+  const words = String(text).split(" ");
+  const lines = [];
+  let line = "";
+
+  words.forEach(word => {
+    const testLine = line ? `${line} ${word}` : word;
+    if (ctx.measureText(testLine).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = testLine;
+    }
+  });
+
+  lines.push(line);
+  return lines;
+}
+
+function makeSafeFileName(name) {
+  return String(name).replace(/[^a-z0-9._-]+/gi, "-").replace(/-+/g, "-").toLowerCase();
+}
+
 async function addTask() {
   const title = $("taskTitle").value.trim();
   const dueDate = $("taskDue").value;
@@ -524,25 +763,30 @@ async function deleteOrder(id) {
 }
 
 async function enablePushNotifications() {
-  if (!messaging) {
-    alert("Notifications are not available in this browser.");
-    return;
-  }
-
   if (!currentUser) {
     alert("Enter BLAB first, then enable reminders.");
     return;
   }
 
-  if (PUBLIC_VAPID_KEY.includes("PASTE_")) {
-    alert("Add your Firebase Web Push certificate key to PUBLIC_VAPID_KEY in app.js first.");
+  localStorage.setItem(LOCAL_REMINDERS_KEY, "true");
+
+  if (!("Notification" in window)) {
+    alert("In-app reminder banners are enabled. Browser notifications are not available on this device/browser.");
+    startInAppReminderChecker();
     return;
   }
 
   const permission = await Notification.requestPermission();
 
   if (permission !== "granted") {
-    alert("Notifications were not enabled.");
+    alert("In-app reminder banners are enabled. Phone/browser notification permission was not granted.");
+    startInAppReminderChecker();
+    return;
+  }
+
+  if (!messaging || PUBLIC_VAPID_KEY.includes("PASTE_")) {
+    alert("In-app reminders are enabled. Background push reminders are not configured yet, so reminders work while BLAB is open.");
+    startInAppReminderChecker();
     return;
   }
 
@@ -566,8 +810,10 @@ async function enablePushNotifications() {
     alert("Reminders enabled for this device.");
   } catch (error) {
     console.error(error);
-    alert("Could not enable reminders. Check console for details.");
+    alert("In-app reminders are enabled, but background push could not be enabled. Check console for details.");
   }
+
+  startInAppReminderChecker();
 }
 
 if (messaging) {
@@ -600,12 +846,113 @@ function isAdmin() {
   return isAdminUnlocked;
 }
 
+
+function startInAppReminderChecker() {
+  if (reminderTimer) return;
+
+  checkInAppReminders();
+  reminderTimer = setInterval(checkInAppReminders, 30000);
+}
+
+function getShownReminderMap() {
+  try {
+    return JSON.parse(localStorage.getItem(SHOWN_REMINDERS_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveShownReminderMap(map) {
+  localStorage.setItem(SHOWN_REMINDERS_KEY, JSON.stringify(map));
+}
+
+function checkInAppReminders() {
+  if (!currentUser || !currentProfile || bookings.length === 0) return;
+
+  const now = new Date();
+  const shown = getShownReminderMap();
+  let changed = false;
+
+  bookings.forEach(booking => {
+    if (booking.status !== "active") return;
+    if (booking.userId !== currentUser.uid) return;
+
+    const reminderMinutes = Number(booking.reminderMinutes || 0);
+    if (reminderMinutes <= 0) return;
+
+    const end = booking.endTime?.toDate ? booking.endTime.toDate() : null;
+    if (!end) return;
+
+    const reminderTime = new Date(end.getTime() - reminderMinutes * 60 * 1000);
+    const reminderKey = `${booking.id}:ending:${reminderMinutes}`;
+    const overdueKey = `${booking.id}:overdue`;
+
+    if (now >= reminderTime && now < end && !shown[reminderKey]) {
+      const message = `${booking.instrumentName} ends at ${formatDateTime(end)}.`;
+      showInAppReminder(`BLAB reminder: ${formatReminder(reminderMinutes)}`, message);
+      shown[reminderKey] = new Date().toISOString();
+      changed = true;
+    }
+
+    if (now >= end && !shown[overdueKey]) {
+      const message = `${booking.instrumentName} booking has ended. Mark it finished when done.`;
+      showInAppReminder("BLAB overdue reminder", message);
+      shown[overdueKey] = new Date().toISOString();
+      changed = true;
+    }
+  });
+
+  if (changed) saveShownReminderMap(shown);
+}
+
+function showInAppReminder(title, message) {
+  const fullMessage = `${title}\n${message}`;
+
+  showReminderToast(title, message);
+
+  if (localStorage.getItem(LOCAL_REMINDERS_KEY) === "true" && "Notification" in window && Notification.permission === "granted") {
+    try {
+      new Notification(title, {
+        body: message,
+        tag: `blab-${Date.now()}`
+      });
+    } catch (error) {
+      console.warn("Notification failed", error);
+    }
+  }
+
+  console.log(fullMessage);
+}
+
+function showReminderToast(title, message) {
+  let toast = document.getElementById("blabReminderToast");
+
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "blabReminderToast";
+    toast.className = "reminder-toast";
+    document.body.appendChild(toast);
+  }
+
+  toast.innerHTML = `
+    <button class="toast-close" aria-label="Close reminder" onclick="this.parentElement.classList.remove('show')">×</button>
+    <strong>${escapeHTML(title)}</strong>
+    <div>${escapeHTML(message)}</div>
+  `;
+
+  toast.classList.add("show");
+  setTimeout(() => toast.classList.remove("show"), 12000);
+}
+
 function renderAll() {
   if (!currentProfile) return;
 
   renderDashboard();
   renderBookings();
   renderProjects();
+  renderProjectNoteSelectors();
+  renderProjectNotes();
+  checkInAppReminders();
   renderTasks();
   renderOrders();
   renderAdmin();
@@ -821,6 +1168,60 @@ function renderProjects() {
   }).join("");
 }
 
+
+function renderProjectNoteSelectors() {
+  const select = $("noteProjectSelect");
+  if (!select) return;
+
+  const previous = select.value;
+  const sortedProjects = projects.slice().sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+
+  select.innerHTML = sortedProjects.length === 0
+    ? `<option value="">No projects yet</option>`
+    : sortedProjects.map(project => `<option value="${project.id}">${escapeHTML(project.title)}</option>`).join("");
+
+  if (previous && sortedProjects.some(project => project.id === previous)) {
+    select.value = previous;
+  }
+}
+
+function renderProjectNotes() {
+  const box = $("projectNotesList");
+  const title = $("notebookTitle");
+  const project = getSelectedProject();
+
+  if (!box || !title) return;
+
+  if (!project) {
+    title.textContent = "Notebook Preview";
+    box.innerHTML = `<div class="empty">Select or create a project to write notes.</div>`;
+    return;
+  }
+
+  title.textContent = `${project.title} Notes`;
+  const notes = getNotesForProject(project.id);
+
+  if (notes.length === 0) {
+    box.innerHTML = `<div class="empty">No notes for this project yet.</div>`;
+    return;
+  }
+
+  box.innerHTML = notes.map(note => {
+    const date = note.createdAt?.toDate ? formatDateTime(note.createdAt.toDate()) : "Date not available";
+    return `
+      <div class="item note-item">
+        <div class="item-head">
+          <div>
+            <div class="title">${escapeHTML(note.authorName || "Unknown")}</div>
+            <div class="muted">${escapeHTML(date)}</div>
+          </div>
+        </div>
+        <p>${escapeHTML(note.text || "").replaceAll("\n", "<br>")}</p>
+      </div>
+    `;
+  }).join("");
+}
+
 function getProjectBadgeClass(status) {
   if (status === "Completed") return "success";
   if (status === "Paused") return "warning";
@@ -954,6 +1355,9 @@ window.blab = {
   updateProjectProgress,
   updateProjectStatus,
   deleteProject,
+  addProjectNote,
+  exportSelectedProjectNotesPdf,
+  exportSelectedProjectNotesPng,
   markTaskDone,
   reopenTask,
   deleteTask,

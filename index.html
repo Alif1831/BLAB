@@ -227,6 +227,35 @@
             <div id="projectsList" class="list"></div>
           </div>
         </div>
+
+        <br>
+
+        <div class="card notebook-card">
+          <h2>Project Notebook</h2>
+          <p class="muted">Save experiment notes, progress updates, observations, links, and next steps. Notes are shared with everyone in BLAB.</p>
+
+          <div class="grid grid-2">
+            <div class="form">
+              <label>
+                Select project
+                <select id="noteProjectSelect"></select>
+              </label>
+
+              <textarea id="projectNoteText" rows="6" placeholder="Write a project note, e.g. electrolyte, catalyst loading, CV conditions, result, issue, next experiment..."></textarea>
+
+              <div class="actions">
+                <button class="btn" id="addProjectNoteBtn">Add Note</button>
+                <button class="btn secondary" id="exportProjectPdfBtn">Export Notes as PDF</button>
+                <button class="btn secondary" id="exportProjectPngBtn">Export Notes as PNG</button>
+              </div>
+            </div>
+
+            <div>
+              <h3 id="notebookTitle">Notebook Preview</h3>
+              <div id="projectNotesList" class="list"></div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section id="tasks" class="page">
