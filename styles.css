@@ -448,3 +448,79 @@ textarea {
     max-width: none;
   }
 }
+
+/* Project workspace: project folder + editable note files */
+.workspace-grid {
+  grid-template-columns: 320px minmax(0, 1fr);
+  align-items: start;
+}
+
+.workspace-sidebar {
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 14px;
+}
+
+.workspace-help {
+  margin: 12px 0;
+  padding: 12px;
+  border-radius: 14px;
+  background: #ecfeff;
+  border: 1px solid #cffafe;
+}
+
+.workspace-help p {
+  margin: 6px 0 0;
+}
+
+.workspace-editor {
+  min-width: 0;
+}
+
+.editor-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.editor-head h3 {
+  margin: 0 0 4px;
+  color: var(--primary);
+}
+
+.compact-list {
+  max-height: 620px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.note-file {
+  cursor: default;
+}
+
+.note-file.active-note {
+  border-color: var(--primary2);
+  background: #ecfeff;
+  box-shadow: 0 0 0 4px rgba(8,145,178,0.10);
+}
+
+.note-file p {
+  margin-bottom: 10px;
+}
+
+@media (max-width: 900px) {
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .compact-list {
+    max-height: none;
+  }
+
+  .editor-head {
+    display: grid;
+  }
+}

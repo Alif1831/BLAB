@@ -78,6 +78,7 @@ let isAdminUnlocked = localStorage.getItem("blabAdminUnlocked") === "true";
 let bookings = [];
 let projects = [];
 let projectNotes = [];
+let currentEditingNoteId = null;
 let tasks = [];
 let orders = [];
 let reminderTimer = null;
@@ -117,8 +118,11 @@ $("instrumentCategory").addEventListener("change", updateInstrumentOptions);
 $("bookInstrumentBtn").addEventListener("click", addBooking);
 $("addProjectBtn").addEventListener("click", addProject);
 $("projectStatusFilter").addEventListener("change", renderProjects);
-$("noteProjectSelect").addEventListener("change", renderProjectNotes);
-$("addProjectNoteBtn").addEventListener("click", addProjectNote);
+$("noteProjectSelect").addEventListener("change", () => { clearProjectNoteEditor(false); renderProjectNotes(); });
+$("saveProjectNoteBtn").addEventListener("click", saveProjectNote);
+$("clearNoteEditorBtn").addEventListener("click", () => clearProjectNoteEditor(true));
+$("exportSelectedNotePdfBtn").addEventListener("click", exportEditingNotePdf);
+$("exportSelectedNotePngBtn").addEventListener("click", exportEditingNotePng);
 $("exportProjectPdfBtn").addEventListener("click", exportSelectedProjectNotesPdf);
 $("exportProjectPngBtn").addEventListener("click", exportSelectedProjectNotesPng);
 $("addTaskBtn").addEventListener("click", addTask);
@@ -455,8 +459,9 @@ async function deleteProject(id) {
 }
 
 
-async function addProjectNote() {
+async function saveProjectNote() {
   const projectId = $("noteProjectSelect").value;
+  const title = $("projectNoteTitle").value.trim();
   const text = $("projectNoteText").value.trim();
 
   if (!projectId) {
@@ -464,29 +469,125 @@ async function addProjectNote() {
     return;
   }
 
+  if (!title) {
+    alert("Please enter a note/file title, for example Week 1.");
+    return;
+  }
+
   if (!text) {
-    alert("Please write a note first.");
+    alert("Please write something in the note before saving.");
     return;
   }
 
   const project = projects.find(item => item.id === projectId);
 
-  await addDoc(collection(db, "projectNotes"), {
-    projectId,
-    projectTitle: project?.title || "Untitled project",
-    text,
-    authorId: currentUser.uid,
-    authorName: currentProfile.name,
-    createdAt: serverTimestamp()
-  });
+  if (currentEditingNoteId) {
+    await updateDoc(doc(db, "projectNotes", currentEditingNoteId), {
+      title,
+      text,
+      updatedAt: serverTimestamp(),
+      lastEditedById: currentUser.uid,
+      lastEditedByName: currentProfile.name
+    });
+  } else {
+    const newDoc = await addDoc(collection(db, "projectNotes"), {
+      projectId,
+      projectTitle: project?.title || "Untitled project",
+      title,
+      text,
+      authorId: currentUser.uid,
+      authorName: currentProfile.name,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      lastEditedById: currentUser.uid,
+      lastEditedByName: currentProfile.name
+    });
+
+    currentEditingNoteId = newDoc.id;
+  }
 
   await updateDoc(doc(db, "projects", projectId), {
-    progress: text,
+    progress: text.slice(0, 500),
     updatedAt: serverTimestamp(),
     lastUpdatedBy: currentProfile.name
   });
 
-  $("projectNoteText").value = "";
+  setEditingStatus();
+  renderProjectNotes();
+  alert("Note saved. You can keep editing it later.");
+}
+
+function clearProjectNoteEditor(focusTitle = true) {
+  currentEditingNoteId = null;
+  if ($("projectNoteTitle")) $("projectNoteTitle").value = "";
+  if ($("projectNoteText")) $("projectNoteText").value = "";
+  setEditingStatus();
+  if (focusTitle && $("projectNoteTitle")) $("projectNoteTitle").focus();
+  renderProjectNotes();
+}
+
+function setEditingStatus() {
+  const status = $("editingNoteStatus");
+  if (!status) return;
+
+  if (!currentEditingNoteId) {
+    status.textContent = "Creating a new editable note/file.";
+    return;
+  }
+
+  const note = projectNotes.find(item => item.id === currentEditingNoteId);
+  status.textContent = note
+    ? `Editing: ${note.title || "Untitled note"}`
+    : "Editing saved note/file.";
+}
+
+function editProjectNote(id) {
+  const note = projectNotes.find(item => item.id === id);
+  if (!note) return;
+
+  const projectSelect = $("noteProjectSelect");
+  if (projectSelect && note.projectId) {
+    projectSelect.value = note.projectId;
+  }
+
+  currentEditingNoteId = id;
+  $("projectNoteTitle").value = note.title || "Untitled note";
+  $("projectNoteText").value = note.text || "";
+  setEditingStatus();
+  renderProjectNotes();
+
+  $("projectNoteTitle").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+async function deleteProjectNote(id) {
+  const note = projectNotes.find(item => item.id === id);
+  if (!note) return;
+
+  const canDelete = isAdmin() || note.authorId === currentUser.uid || note.lastEditedById === currentUser.uid;
+
+  if (!canDelete) {
+    alert("Only the note author/editor or admin can delete this note.");
+    return;
+  }
+
+  if (!confirm(`Delete note/file: ${note.title || "Untitled note"}?`)) return;
+
+  await deleteDoc(doc(db, "projectNotes", id));
+
+  if (currentEditingNoteId === id) {
+    clearProjectNoteEditor(false);
+  }
+}
+
+function openProjectNotebook(projectId) {
+  const select = $("noteProjectSelect");
+  if (select) {
+    select.value = projectId;
+  }
+  clearProjectNoteEditor(false);
+  renderProjectNotes();
+  const card = document.querySelector(".notebook-card");
+  if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function getSelectedProject() {
@@ -498,10 +599,73 @@ function getNotesForProject(projectId) {
   return projectNotes
     .filter(note => note.projectId === projectId)
     .sort((a, b) => {
-      const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-      const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+      const aTime = getNoteSortTime(a);
+      const bTime = getNoteSortTime(b);
       return bTime - aTime;
     });
+}
+
+function getNoteSortTime(note) {
+  const updated = note.updatedAt?.toDate ? note.updatedAt.toDate().getTime() : 0;
+  const created = note.createdAt?.toDate ? note.createdAt.toDate().getTime() : 0;
+  return updated || created || 0;
+}
+
+function getEditingNote() {
+  if (!currentEditingNoteId) return null;
+  return projectNotes.find(item => item.id === currentEditingNoteId) || null;
+}
+
+function exportEditingNotePdf() {
+  const note = getEditingNote();
+  const project = getSelectedProject();
+
+  if (!note || !project) {
+    alert("Select a saved note/file first, then export it.");
+    return;
+  }
+
+  exportSingleNotePdf(note.id);
+}
+
+function exportEditingNotePng() {
+  const note = getEditingNote();
+  const project = getSelectedProject();
+
+  if (!note || !project) {
+    alert("Select a saved note/file first, then export it.");
+    return;
+  }
+
+  exportSingleNotePng(note.id);
+}
+
+function exportSingleNotePdf(noteId) {
+  const note = projectNotes.find(item => item.id === noteId);
+  if (!note) return;
+
+  const project = projects.find(item => item.id === note.projectId) || getSelectedProject();
+  const printable = buildSingleNoteHtml(project, note);
+  const win = window.open("", "_blank");
+
+  if (!win) {
+    alert("Popup blocked. Allow popups for BLAB, then try again.");
+    return;
+  }
+
+  win.document.write(printable);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 300);
+}
+
+function exportSingleNotePng(noteId) {
+  const note = projectNotes.find(item => item.id === noteId);
+  if (!note) return;
+
+  const project = projects.find(item => item.id === note.projectId) || getSelectedProject();
+  const lines = buildSingleNoteLines(project, note);
+  exportLinesAsPng(lines, `${project?.title || "project"}-${note.title || "note"}.png`, "BLAB Project Note");
 }
 
 function exportSelectedProjectNotesPdf() {
@@ -537,6 +701,10 @@ function exportSelectedProjectNotesPng() {
 
   const notes = getNotesForProject(project.id);
   const lines = buildProjectNotesLines(project, notes);
+  exportLinesAsPng(lines, `${project.title || "project"}-all-notes.png`, "BLAB Project Notes");
+}
+
+function exportLinesAsPng(lines, fileName, heading) {
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d");
   const width = 1200;
@@ -557,7 +725,7 @@ function exportSelectedProjectNotesPng() {
 
   ctx.fillStyle = "#155e75";
   ctx.font = "bold 42px Arial";
-  ctx.fillText("BLAB Project Notes", padding, padding);
+  ctx.fillText(heading, padding, padding);
 
   ctx.fillStyle = "#172033";
   ctx.font = "22px Arial";
@@ -569,9 +737,24 @@ function exportSelectedProjectNotesPng() {
   });
 
   const link = document.createElement("a");
-  link.download = makeSafeFileName(`${project.title || "project"}-notes.png`);
+  link.download = makeSafeFileName(fileName);
   link.href = canvas.toDataURL("image/png");
   link.click();
+}
+
+function buildSingleNoteLines(project, note) {
+  const created = note.createdAt?.toDate ? formatDateTime(note.createdAt.toDate()) : "Date not available";
+  const updated = note.updatedAt?.toDate ? formatDateTime(note.updatedAt.toDate()) : created;
+
+  const lines = [];
+  lines.push(`Project: ${project?.title || note.projectTitle || "Untitled project"}`);
+  lines.push(`Note/File: ${note.title || "Untitled note"}`);
+  lines.push(`Author: ${note.authorName || "Unknown"}`);
+  lines.push(`Created: ${created}`);
+  lines.push(`Updated: ${updated}`);
+  lines.push("");
+  String(note.text || "").split("\n").forEach(noteLine => lines.push(noteLine));
+  return lines;
 }
 
 function buildProjectNotesLines(project, notes) {
@@ -585,15 +768,17 @@ function buildProjectNotesLines(project, notes) {
   lines.push(`Current progress: ${project.progress || "No progress added"}`);
   lines.push(`Next step: ${project.nextStep || "Not set"}`);
   lines.push("");
-  lines.push("Notes:");
+  lines.push("Project files / notes:");
 
   if (notes.length === 0) {
     lines.push("No notes yet.");
   } else {
     notes.forEach(note => {
-      const date = note.createdAt?.toDate ? formatDateTime(note.createdAt.toDate()) : "Date not available";
+      const date = note.updatedAt?.toDate
+        ? formatDateTime(note.updatedAt.toDate())
+        : (note.createdAt?.toDate ? formatDateTime(note.createdAt.toDate()) : "Date not available");
       lines.push("");
-      lines.push(`${date} — ${note.authorName || "Unknown"}`);
+      lines.push(`${note.title || "Untitled note"} — ${date} — ${note.lastEditedByName || note.authorName || "Unknown"}`);
       String(note.text || "").split("\n").forEach(noteLine => lines.push(noteLine));
     });
   }
@@ -601,14 +786,51 @@ function buildProjectNotesLines(project, notes) {
   return lines;
 }
 
+function buildSingleNoteHtml(project, note) {
+  const created = note.createdAt?.toDate ? formatDateTime(note.createdAt.toDate()) : "Date not available";
+  const updated = note.updatedAt?.toDate ? formatDateTime(note.updatedAt.toDate()) : created;
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <title>${escapeHTML(note.title || "Project Note")}</title>
+        <style>
+          body { font-family: Arial, sans-serif; color: #172033; padding: 36px; line-height: 1.45; }
+          h1 { color: #155e75; margin-bottom: 4px; }
+          .meta { color: #64748b; margin-bottom: 24px; }
+          .box { border: 1px solid #d8e0ea; border-radius: 14px; padding: 16px; margin: 14px 0; }
+          @media print { button { display: none; } body { padding: 0; } }
+        </style>
+      </head>
+      <body>
+        <button onclick="window.print()">Save / Print PDF</button>
+        <h1>${escapeHTML(note.title || "Untitled note")}</h1>
+        <div class="meta">Project: ${escapeHTML(project?.title || note.projectTitle || "Untitled project")} · Exported ${escapeHTML(formatDateTime(new Date()))}</div>
+        <div class="box">
+          <p><b>Author:</b> ${escapeHTML(note.authorName || "Unknown")}</p>
+          <p><b>Created:</b> ${escapeHTML(created)}</p>
+          <p><b>Last edited:</b> ${escapeHTML(updated)}${note.lastEditedByName ? ` by ${escapeHTML(note.lastEditedByName)}` : ""}</p>
+        </div>
+        <div class="box">
+          ${escapeHTML(note.text || "").replaceAll("\n", "<br>")}
+        </div>
+      </body>
+    </html>
+  `;
+}
+
 function buildProjectNotesHtml(project, notes) {
   const noteHtml = notes.length === 0
     ? `<p>No notes yet.</p>`
     : notes.map(note => {
-        const date = note.createdAt?.toDate ? formatDateTime(note.createdAt.toDate()) : "Date not available";
+        const date = note.updatedAt?.toDate
+          ? formatDateTime(note.updatedAt.toDate())
+          : (note.createdAt?.toDate ? formatDateTime(note.createdAt.toDate()) : "Date not available");
         return `
           <section class="note">
-            <h3>${escapeHTML(date)} — ${escapeHTML(note.authorName || "Unknown")}</h3>
+            <h3>${escapeHTML(note.title || "Untitled note")}</h3>
+            <div class="meta">${escapeHTML(date)} — ${escapeHTML(note.lastEditedByName || note.authorName || "Unknown")}</div>
             <p>${escapeHTML(note.text || "").replaceAll("\n", "<br>")}</p>
           </section>
         `;
@@ -623,16 +845,16 @@ function buildProjectNotesHtml(project, notes) {
           body { font-family: Arial, sans-serif; color: #172033; padding: 36px; line-height: 1.45; }
           h1 { color: #155e75; margin-bottom: 4px; }
           h2 { color: #155e75; border-bottom: 1px solid #d8e0ea; padding-bottom: 8px; }
-          .meta { color: #64748b; margin-bottom: 24px; }
+          .meta { color: #64748b; margin-bottom: 14px; }
           .box { border: 1px solid #d8e0ea; border-radius: 14px; padding: 16px; margin: 14px 0; }
           .note { border-top: 1px solid #d8e0ea; padding-top: 12px; margin-top: 16px; }
-          .note h3 { font-size: 15px; color: #334155; }
+          .note h3 { font-size: 18px; color: #334155; margin-bottom: 4px; }
           @media print { button { display: none; } body { padding: 0; } }
         </style>
       </head>
       <body>
         <button onclick="window.print()">Save / Print PDF</button>
-        <h1>BLAB Project Notes</h1>
+        <h1>BLAB Project Workspace</h1>
         <div class="meta">Exported ${escapeHTML(formatDateTime(new Date()))}</div>
         <div class="box">
           <h2>${escapeHTML(project.title || "Untitled project")}</h2>
@@ -643,7 +865,7 @@ function buildProjectNotesHtml(project, notes) {
           <p><b>Current progress:</b><br>${escapeHTML(project.progress || "No progress added").replaceAll("\n", "<br>")}</p>
           <p><b>Next step:</b><br>${escapeHTML(project.nextStep || "Not set").replaceAll("\n", "<br>")}</p>
         </div>
-        <h2>Notes</h2>
+        <h2>Project Files / Notes</h2>
         ${noteHtml}
       </body>
     </html>
@@ -1153,6 +1375,7 @@ function renderProjects() {
         <p class="muted">Last updated: ${updated}${project.lastUpdatedBy ? ` by ${escapeHTML(project.lastUpdatedBy)}` : ""}</p>
 
         <div class="actions">
+          <button class="btn small secondary" onclick="window.blab.openProjectNotebook('${project.id}')">Open Notebook</button>
           <button class="btn small secondary" onclick="window.blab.updateProjectProgress('${project.id}')">Update Progress</button>
           <button class="btn small" onclick="window.blab.updateProjectStatus('${project.id}', 'Active')">Active</button>
           <button class="btn small warning" onclick="window.blab.updateProjectStatus('${project.id}', 'Paused')">Paused</button>
@@ -1193,30 +1416,50 @@ function renderProjectNotes() {
   if (!box || !title) return;
 
   if (!project) {
-    title.textContent = "Notebook Preview";
-    box.innerHTML = `<div class="empty">Select or create a project to write notes.</div>`;
+    title.textContent = "Project Workspace";
+    box.innerHTML = `<div class="empty">Select or create a project first.</div>`;
+    setEditingStatus();
     return;
   }
 
-  title.textContent = `${project.title} Notes`;
+  title.textContent = project.title;
   const notes = getNotesForProject(project.id);
 
+  if (currentEditingNoteId && !notes.some(note => note.id === currentEditingNoteId)) {
+    currentEditingNoteId = null;
+  }
+
+  setEditingStatus();
+
   if (notes.length === 0) {
-    box.innerHTML = `<div class="empty">No notes for this project yet.</div>`;
+    box.innerHTML = `<div class="empty">No note files yet. Create Week 1, Experiment 1, Literature Notes, etc.</div>`;
     return;
   }
 
   box.innerHTML = notes.map(note => {
-    const date = note.createdAt?.toDate ? formatDateTime(note.createdAt.toDate()) : "Date not available";
+    const updated = note.updatedAt?.toDate
+      ? formatDateTime(note.updatedAt.toDate())
+      : (note.createdAt?.toDate ? formatDateTime(note.createdAt.toDate()) : "Date not available");
+    const excerpt = String(note.text || "").slice(0, 120);
+    const activeClass = note.id === currentEditingNoteId ? "active-note" : "";
+    const canDelete = isAdmin() || note.authorId === currentUser.uid || note.lastEditedById === currentUser.uid;
+
     return `
-      <div class="item note-item">
+      <div class="item note-file ${activeClass}">
         <div class="item-head">
           <div>
-            <div class="title">${escapeHTML(note.authorName || "Unknown")}</div>
-            <div class="muted">${escapeHTML(date)}</div>
+            <div class="title">${escapeHTML(note.title || "Untitled note")}</div>
+            <div class="muted">Updated: ${escapeHTML(updated)}</div>
+            <div class="muted">By: ${escapeHTML(note.lastEditedByName || note.authorName || "Unknown")}</div>
           </div>
         </div>
-        <p>${escapeHTML(note.text || "").replaceAll("\n", "<br>")}</p>
+        <p>${escapeHTML(excerpt)}${String(note.text || "").length > 120 ? "..." : ""}</p>
+        <div class="actions">
+          <button class="btn small" onclick="window.blab.editProjectNote('${note.id}')">Edit</button>
+          <button class="btn small secondary" onclick="window.blab.exportSingleNotePdf('${note.id}')">PDF</button>
+          <button class="btn small secondary" onclick="window.blab.exportSingleNotePng('${note.id}')">PNG</button>
+          ${canDelete ? `<button class="btn small danger" onclick="window.blab.deleteProjectNote('${note.id}')">Delete</button>` : ""}
+        </div>
       </div>
     `;
   }).join("");
@@ -1355,7 +1598,13 @@ window.blab = {
   updateProjectProgress,
   updateProjectStatus,
   deleteProject,
-  addProjectNote,
+  saveProjectNote,
+  editProjectNote,
+  deleteProjectNote,
+  clearProjectNoteEditor,
+  openProjectNotebook,
+  exportSingleNotePdf,
+  exportSingleNotePng,
   exportSelectedProjectNotesPdf,
   exportSelectedProjectNotesPng,
   markTaskDone,

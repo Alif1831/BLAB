@@ -231,29 +231,48 @@
         <br>
 
         <div class="card notebook-card">
-          <h2>Project Notebook</h2>
-          <p class="muted">Save experiment notes, progress updates, observations, links, and next steps. Notes are shared with everyone in BLAB.</p>
+          <h2>Project Workspace</h2>
+          <p class="muted">
+            Each project is like a folder. Inside a project, create separate editable notes/files such as Week 1, Week 2, Experiment 1, Literature notes, or Meeting notes. Each note can be edited and exported by itself.
+          </p>
 
-          <div class="grid grid-2">
-            <div class="form">
+          <div class="grid workspace-grid">
+            <aside class="workspace-sidebar">
               <label>
-                Select project
+                Open project
                 <select id="noteProjectSelect"></select>
               </label>
 
-              <textarea id="projectNoteText" rows="6" placeholder="Write a project note, e.g. electrolyte, catalyst loading, CV conditions, result, issue, next experiment..."></textarea>
-
-              <div class="actions">
-                <button class="btn" id="addProjectNoteBtn">Add Note</button>
-                <button class="btn secondary" id="exportProjectPdfBtn">Export Notes as PDF</button>
-                <button class="btn secondary" id="exportProjectPngBtn">Export Notes as PNG</button>
+              <div class="workspace-help">
+                <b>Project files</b>
+                <p class="muted">Tap a file to edit it. Use export buttons on each file for PDF/PNG.</p>
               </div>
-            </div>
 
-            <div>
-              <h3 id="notebookTitle">Notebook Preview</h3>
-              <div id="projectNotesList" class="list"></div>
-            </div>
+              <div id="projectNotesList" class="list compact-list"></div>
+            </aside>
+
+            <section class="workspace-editor">
+              <div class="editor-head">
+                <div>
+                  <h3 id="notebookTitle">Project Workspace</h3>
+                  <p id="editingNoteStatus" class="muted">Create a new note/file or select one to edit.</p>
+                </div>
+                <button class="btn small secondary" id="clearNoteEditorBtn">New Note</button>
+              </div>
+
+              <div class="form">
+                <input id="projectNoteTitle" placeholder="Note/file title, e.g. Week 1, CV test 01, Meeting notes">
+                <textarea id="projectNoteText" rows="12" placeholder="Write progress, experiment conditions, observations, links, next steps, figures to add later..."></textarea>
+
+                <div class="actions">
+                  <button class="btn" id="saveProjectNoteBtn">Save Note</button>
+                  <button class="btn secondary" id="exportSelectedNotePdfBtn">Export This Note PDF</button>
+                  <button class="btn secondary" id="exportSelectedNotePngBtn">Export This Note PNG</button>
+                  <button class="btn secondary" id="exportProjectPdfBtn">Export Whole Project PDF</button>
+                  <button class="btn secondary" id="exportProjectPngBtn">Export Whole Project PNG</button>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
       </section>
